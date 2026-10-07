@@ -51,7 +51,7 @@ Serveurs LSP : basedpyright + ruff (Python), lua_ls, bashls, clangd.
 ## Installation — Linux sans sudo (Fedora…)
 
 ```bash
-git clone https://github.com/<toi>/nvim-config.git ~/nvim-config
+git clone https://github.com/bachrilrs/nvim-config.git ~/nvim-config
 cd ~/nvim-config
 ./install.sh            # ou ./install.sh --fonts pour la Nerd Font
 source ~/.bashrc        # ou ouvrir un nouveau terminal
