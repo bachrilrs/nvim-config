@@ -1,0 +1,9 @@
+# macOS
+.DS_Store
+
+# Fichiers temporaires d'éditeurs
+*.swp
+*~
+
+# Journal technique éventuel de Neovim (≠ docs/setup-log-macos.txt)
+nvim/nvim.log

@@ -1,0 +1,520 @@
+================================================================================
+NEOVIM SETUP LOG
+================================================================================
+(Ce fichier est un compte-rendu écrit. Ne pas confondre avec le journal
+technique de Neovim : ~/.local/state/nvim/nvim.log)
+
+--------------------------------------------------------------------------------
+DATE
+--------------------------------------------------------------------------------
+2026-10-06, entre 22:25 et 22:55 (heure locale)
+
+--------------------------------------------------------------------------------
+MACHINE
+--------------------------------------------------------------------------------
+macOS 27.0.1 (build 26A434)
+Apple M1, arm64
+Terminal : WezTerm (TERM=xterm-256color), shell zsh
+Police : JetBrainsMono Nerd Font (installée -> les icônes s'affichent)
+
+--------------------------------------------------------------------------------
+VERSIONS INITIALES (audit, avant toute modification)
+--------------------------------------------------------------------------------
+Neovim          0.12.5 (Homebrew, /opt/homebrew/bin/nvim, LuaJIT 2.1)
+Homebrew        7.0.8
+git             2.55.0
+node / npm      26.8.2 / 11.19.1
+python3         3.14.7 (Homebrew) ; /usr/bin/python3 (système) aussi présent
+uv / pipx       0.12.23 / 1.17.3
+clang / gcc     Apple clang 21.0.0 (gcc = alias de clang) ; Command Line Tools OK
+make            GNU Make 3.81
+fd              10.5.0
+ripgrep (rg)    15.2.0
+tree-sitter-cli 0.27.0
+curl / tar      8.7.1 / bsdtar 3.5.3
+R               4.5.2 (/usr/local/bin/R)
+Absents         ruff, basedpyright, pyright, lua-language-server, stylua,
+                bash-language-server, shellcheck, shfmt
+
+--------------------------------------------------------------------------------
+CONFIGURATION INITIALE (~/.config/nvim)
+--------------------------------------------------------------------------------
+init.lua (monolithique), lazy-lock.json, nvim-pack-lock.json,
+vim-options.lua (vide, et hors de lua/ donc jamais chargeable),
+lua/plugins.lua (copie de la liste de plugins, jamais chargée),
+lua/plugins/ (vide).
+
+Problèmes constatés :
+ 1. DEUX gestionnaires de plugins en même temps :
+    - vim.pack.add() (natif Neovim 0.12) installait neo-tree, plenary, nui,
+      devicons dans ~/.local/share/nvim/site/pack/core/opt
+    - lazy.nvim installait les mêmes plugins une 2ᵉ fois
+    -> deux versions de neo-tree (f3f3bf7 et 1a14083), warning checkhealth.
+ 2. Ctrl+P : le commentaire disait « tout le HOME » mais cherchait dans le cwd.
+ 3. <leader>fg : live_grep dans TOUT le HOME (lent).
+ 4. vim.loop (déprécié -> vim.uv) ; `syntax on` / `filetype plugin indent on`
+    redondants (défauts de Neovim).
+ 5. :checkhealth lazy : ERROR luarocks non installé (rocks inutile ici).
+ 6. Fichiers swap orphelins pour init.lua et lua/plugins.lua (+ un fichier
+    pihole qui n'existe plus).
+ Point positif : Treesitter utilisait déjà la NOUVELLE API (branche main :
+ require("nvim-treesitter").setup()/install()) ; parsers python/lua/c installés.
+
+Données : ~/.local/share/nvim (40 Mo : lazy/, site/parser, site/pack/core)
+Cache   : ~/.cache/nvim (catppuccin, luac)
+Démarrage initial : sans message d'erreur.
+
+BACKUP : ~/nvim-backups/20261006-223122/
+         ├── config-nvim/   (= ~/.config/nvim)
+         ├── share-nvim/    (= ~/.local/share/nvim)
+         ├── state-nvim/    (= ~/.local/state/nvim)
+         └── cache-nvim/    (= ~/.cache/nvim)
+         Vérifié : `diff -r` identique au moment du backup.
+
+--------------------------------------------------------------------------------
+REPOSITORY DE RÉFÉRENCE : https://github.com/cpow/neovim-for-newbs
+--------------------------------------------------------------------------------
+Dernier commit : b523493 du 2024-04-16 (2,5 ans -> APIs obsolètes).
+
+Architecture :
+  init.lua            bootstrap lazy.nvim, require("vim-options"),
+                      require("lazy").setup("plugins")
+  lua/vim-options.lua options (2 espaces, leader=Espace, pas de swap,
+                      Ctrl+hjkl entre fenêtres, <leader>h = :nohlsearch)
+  lua/plugins.lua     table vide (reliquat)
+  lua/plugins/*.lua   un fichier par plugin, chargé par lazy.nvim
+  lua/.luarc.json     réglages lua_ls
+  lazy-lock.json      versions figées de 27 plugins
+
+Ce que fait chaque fichier de plugin :
+  alpha.lua           écran d'accueil ASCII (alpha-nvim)
+  catppuccin.lua      thème catppuccin-mocha
+  completions.lua     nvim-cmp + cmp-nvim-lsp + LuaSnip + cmp_luasnip +
+                      friendly-snippets (complétion + snippets)
+  git-stuff.lua       vim-fugitive + gitsigns (<leader>gp preview, gt blame)
+  gitsigns.lua        DOUBLON de git-stuff.lua
+  lsp-config.lua      mason + mason-lspconfig + nvim-lspconfig ; serveurs
+                      tsserver, solargraph (Ruby), html, lua_ls ;
+                      K, <leader>gd, <leader>gr, <leader>ca
+  neo-tree.lua        Ctrl+n = Neotree reveal left, <leader>bf buffers
+  none-ls.lua         formatage/lint : stylua, prettier, erb_lint, rubocop ;
+                      <leader>gf = format
+  nvim-tmux-navigation.lua  Ctrl+hjkl entre Neovim et tmux
+  oil.lua             explorateur « buffer » (touche -)
+  swagger-preview.lua prévisualisation d'API Swagger (npm global)
+  telescope.lua       tag 0.1.5 + ui-select ; Ctrl+p, <leader>fg,
+                      <leader><leader> fichiers récents
+  treesitter.lua      require("nvim-treesitter.configs").setup{
+                      auto_install, highlight, indent }
+  vim-test.lua        vim-test + vimux (tests via tmux)
+  Le lock contient aussi lualine, sans aucun fichier de config (orphelin).
+
+APIs obsolètes / incompatibles détectées dans le dépôt :
+  - require("nvim-treesitter.configs") : module SUPPRIMÉ de la branche main
+    (la seule supportée pour Neovim 0.12). Vérifié : lua/nvim-treesitter/
+    ne contient plus configs.lua.
+  - require("lspconfig").X.setup() : ancienne API ; depuis Neovim 0.11 on
+    utilise vim.lsp.config() / vim.lsp.enable() (README nvim-lspconfig).
+  - tsserver renommé ts_ls ; williamboman/mason* déplacé vers mason-org/.
+  - telescope tag 0.1.5 : la version actuelle est v0.2.2 (requiert nvim ≥ 0.11.7).
+  - vim.loop -> vim.uv.
+  -> lazy-lock.json du dépôt NON copié (commits de 2024 incompatibles).
+
+--------------------------------------------------------------------------------
+PLUGINS TROUVÉS DANS LE REPOSITORY (27)
+--------------------------------------------------------------------------------
+LuaSnip, alpha-nvim, catppuccin, cmp-nvim-lsp, cmp_luasnip, friendly-snippets,
+gitsigns.nvim, lazy.nvim, lualine.nvim, mason-lspconfig.nvim, mason.nvim,
+neo-tree.nvim, none-ls.nvim, nui.nvim, nvim-cmp, nvim-lspconfig,
+nvim-tmux-navigation, nvim-treesitter, nvim-web-devicons, oil.nvim,
+plenary.nvim, swagger-preview.nvim, telescope-ui-select.nvim, telescope.nvim,
+vim-fugitive, vim-test, vimux
+
+--------------------------------------------------------------------------------
+PLUGINS CONSERVÉS (10)
+--------------------------------------------------------------------------------
+lazy.nvim, catppuccin, telescope.nvim, plenary.nvim, neo-tree.nvim, nui.nvim,
+nvim-web-devicons, nvim-treesitter (API main), nvim-lspconfig (seulement comme
+catalogue de configs), gitsigns.nvim, lualine.nvim (configuré, absent du dépôt)
+
+--------------------------------------------------------------------------------
+PLUGINS SUPPRIMÉS (par rapport au dépôt) et pourquoi
+--------------------------------------------------------------------------------
+alpha-nvim            décoratif, aucune valeur fonctionnelle
+nvim-cmp, cmp-nvim-lsp, LuaSnip, cmp_luasnip, friendly-snippets
+                      remplacés par blink.cmp (1 plugin au lieu de 5)
+mason, mason-lspconfig serveurs installés via Homebrew (demande explicite,
+                      un seul gestionnaire de paquets système)
+none-ls.nvim          remplacé par conform.nvim (format) + ruff/shellcheck via
+                      LSP (lint). none-ls = fork communautaire de null-ls archivé
+vim-fugitive          Git complet inutile ici ; le terminal suffit
+nvim-tmux-navigation, vim-test, vimux   tu utilises WezTerm, pas tmux
+oil.nvim              doublon de Neo-tree
+swagger-preview.nvim  sans rapport avec ton profil
+telescope-ui-select   Neovim 0.12 a déjà vim.ui.select correct ; non nécessaire
+
+--------------------------------------------------------------------------------
+PLUGINS AJOUTÉS
+--------------------------------------------------------------------------------
+telescope-fzf-native.nvim  tri rapide en C pour Telescope (dans ton ancienne
+                           config, absent du dépôt)
+blink.cmp                  autocomplétion
+conform.nvim               formatage
+which-key.nvim             aide-mémoire interactif des raccourcis
+
+--------------------------------------------------------------------------------
+VERSIONS UTILISÉES (lazy-lock.json)
+--------------------------------------------------------------------------------
+Plugin                     Version / branche             Commit    Date
+lazy.nvim                  stable (v11.17.5)             306a055   2025-12-17
+catppuccin                 main (> v2.0.0)               edefef7   2026-08-09
+telescope.nvim             v0.2.2 (version = "*")        5255aa2   2026-02-16
+telescope-fzf-native.nvim  main                          b25b749   2026-05-06
+plenary.nvim               master                        74b06c6   2026-04-10
+nvim-treesitter            main                          e289100f  2026-10-03
+neo-tree.nvim              branche v3.x (3.40.0+56)      1a14083   2026-09-01
+nui.nvim                   main (0.4.0+10)               10fc361   2026-08-21
+nvim-web-devicons          master                        58447c1   2026-09-21
+nvim-lspconfig             master (v2.12.0+15)           33497f49  2026-10-06
+blink.cmp                  v1.10.2 (version = "1.*")     78336bc   2026-04-04
+conform.nvim               master (v9.1.0+)              016802d   2026-08-11
+gitsigns.nvim              main (v2.1.0+)                851a051   2026-10-05
+which-key.nvim             main (v3.17.0)                3aab214   2025-10-28
+lualine.nvim               master                        221ce6b   2026-05-31
+
+Compatibilité Neovim 0.12.5 vérifiée dans chaque README officiel :
+  nvim-treesitter main : requiert Neovim ≥ 0.12.0, tree-sitter-cli ≥ 0.26.1,
+                         curl, tar, compilateur C -> tous OK
+  telescope v0.2.2     : Neovim ≥ 0.11.7 -> OK
+  blink.cmp v1         : Neovim ≥ 0.10 ; binaire précompilé aarch64-apple-darwin
+                         (la v2 est en développement, cassante, et requiert
+                         blink.lib -> on reste sur 1.*, comme le conseille le README)
+  gitsigns             : Neovim ≥ 0.11 -> OK
+  conform              : Neovim ≥ 0.10 -> OK
+  neo-tree             : README recommande branch = "v3.x" et lazy = false
+  catppuccin v2        : colorschemes catppuccin / catppuccin-{latte,frappe,
+                         macchiato,mocha} / catppuccin-nvim
+
+Parsers Treesitter installés (22) dans ~/.local/share/nvim/site/parser :
+  python, lua, bash, c, cpp, r, snakemake, csv (+ tsv, fourni avec csv),
+  json, yaml, toml, markdown, markdown_inline, vim, vimdoc, query,
+  diff, gitcommit, git_config, gitignore, regex
+  Non installés volontairement : javascript/typescript (ajout possible :
+  :TSInstall javascript typescript), nextflow (pas de parser disponible).
+
+--------------------------------------------------------------------------------
+OUTILS SYSTÈME INSTALLÉS (Homebrew)
+--------------------------------------------------------------------------------
+Commande : brew install basedpyright ruff lua-language-server stylua \
+                        bash-language-server shellcheck shfmt
+  basedpyright          1.40.2   (dépend de node)
+  ruff                  0.16.10
+  lua-language-server   3.19.1
+  stylua                2.5.2
+  bash-language-server  5.8.1    (dépend de node)
+  shellcheck            0.11.0
+  shfmt                 3.14.1
+Effet de bord : Homebrew a mis à jour node 26.8.2 -> 26.10.0 (dépendance de
+basedpyright / bash-language-server).
+Rien d'autre n'a été réinstallé : git, fd, rg, tree-sitter, clang, make, curl,
+tar étaient déjà présents et suffisants. clangd est fourni par les Command Line
+Tools d'Apple (/usr/bin/clangd).
+
+--------------------------------------------------------------------------------
+POURQUOI CHAQUE OUTIL EST NÉCESSAIRE
+--------------------------------------------------------------------------------
+git              lazy.nvim clone et met à jour les plugins avec git
+fd               Telescope : lister les fichiers (rapide, respecte .gitignore)
+ripgrep (rg)     Telescope : chercher du texte (live_grep)
+tree-sitter-cli  nvim-treesitter (main) : compile les parsers
+clang + make     compiler les parsers Treesitter et telescope-fzf-native
+curl + tar       télécharger les sources des parsers / binaire blink.cmp
+basedpyright     LSP Python : types, complétion, définition, hover
+ruff             LSP Python : lint + tri des imports + formatage
+lua-language-server  LSP Lua (édition de la config Neovim)
+stylua           formateur Lua
+bash-language-server LSP Bash/Zsh
+shellcheck       analyse des scripts shell (utilisé par bash-language-server)
+shfmt            formateur shell
+node             nécessaire à basedpyright et bash-language-server
+
+--------------------------------------------------------------------------------
+POURQUOI CHAQUE PLUGIN EST INSTALLÉ (et coût)
+--------------------------------------------------------------------------------
+lazy.nvim        Gestionnaire de plugins : installe, met à jour, charge à la
+                 demande, fige les versions (lazy-lock.json). Indispensable.
+catppuccin       Thème (demandé). Coût négligeable (cache compilé).
+telescope.nvim   Recherche floue de fichiers/texte/buffers/aide. Indispensable
+                 pour ton usage. Chargé seulement au 1ᵉʳ usage (cmd/keys).
+  plenary.nvim   Bibliothèque Lua requise par Telescope et Neo-tree.
+  fzf-native     Tri en C, beaucoup plus rapide sur les gros projets. Optionnel
+                 mais quasi gratuit (compilé une fois).
+nvim-treesitter  Installe les parsers -> coloration précise, pliage par
+                 structure, injections (code Python dans Markdown…).
+                 Indispensable. Ne supporte pas le lazy-loading (doc officielle).
+neo-tree.nvim    Explorateur en arbre (demandé). lazy=false demandé par son
+                 README (il se charge lui-même à la demande).
+  nui.nvim       Composants d'interface requis par Neo-tree.
+  nvim-web-devicons  Icônes de fichiers (Neo-tree, Telescope, lualine).
+nvim-lspconfig   Catalogue des configs serveurs (commande, filetypes,
+                 root_markers). Le LSP lui-même est natif dans Neovim 0.12.
+                 Utile, très léger (chargé à l'ouverture d'un fichier).
+blink.cmp        Autocomplétion : un seul plugin, binaire Rust précompilé,
+                 configure tout seul les capabilities LSP. Préféré à :
+                 - nvim-cmp : 5 plugins, plus de configuration ;
+                 - complétion native 0.12 (vim.lsp.completion) : fonctionne
+                   mais sans documentation auto, sans source buffer/chemins,
+                   tri moins bon -> moins confortable pour apprendre.
+conform.nvim     Formatage à la demande (ruff, stylua, shfmt ; LSP en repli).
+                 Optionnel mais très utile pour Python. Léger (chargé sur
+                 <leader>cf / :ConformInfo).
+gitsigns.nvim    Lignes modifiées dans la marge, navigation entre hunks,
+                 aperçu, blame, stage/reset. Utile, léger.
+which-key.nvim   Affiche les suites de raccourcis : idéal pour apprendre.
+                 Optionnel. Chargé après l'affichage (VeryLazy).
+lualine.nvim     Barre de statut lisible (mode, branche, diagnostics).
+                 Optionnel, coût faible (VeryLazy).
+
+Pas installés (évalués, non nécessaires) :
+  nvim-lint      ruff (LSP) et shellcheck (via bashls) fournissent déjà les
+                 diagnostics -> doublon inutile.
+  mason          Homebrew suffit (demande explicite).
+  fugitive/neogit/lazygit  terminal suffisant ; pas d'IDE Git complet.
+  pyright        voir LSP ci-dessous.
+  R languageserver  nécessite le paquet R `languageserver` (non installé, R
+                 étant installé hors Homebrew). Voir maintenance future.
+
+--------------------------------------------------------------------------------
+DÉCISIONS IMPORTANTES
+--------------------------------------------------------------------------------
+D1  Un SEUL gestionnaire de plugins (lazy.nvim). vim.pack retiré et
+    ~/.local/share/nvim/site/pack/core supprimé (après backup).
+D2  Architecture modulaire : init.lua minuscule ; lua/config/ (options,
+    keymaps, autocmds, lazy) ; lua/plugins/ (un fichier par thème).
+    Même logique que le dépôt de référence (plugins/*.lua), plus lisible
+    qu'un init.lua unique, sans la sur-ingénierie d'une distribution.
+D3  Ctrl+P = find_files dans vim.uv.cwd() UNIQUEMENT (:pwd). Recherche
+    dans le HOME séparée : <leader>fh (exclut Library, .cache, .Trash,
+    node_modules, .venv…).
+D4  « fg » = <leader>fg (Espace f g) : un mapping `fg` brut casserait le
+    mouvement natif `f` (« saute au prochain g »).
+D5  Treesitter : branche main + API native vim.treesitter.start() via
+    autocmd FileType, avec pcall (pas d'erreur si pas de parser).
+    Pliage Treesitter activé (natif Neovim, stable, tout déplié à
+    l'ouverture). Indentation Treesitter NON activée : marquée
+    « experimental » dans la doc officielle -> indentation native gardée.
+D6  LSP Python = basedpyright (types) + ruff (lint/imports/format).
+    basedpyright plutôt que pyright : fork plus actif, inclut des
+    fonctionnalités Pylance (inlay hints, meilleure complétion…), packagé
+    sans dépendance npm globale. typeCheckingMode = "standard" (le défaut
+    "recommended" est très strict pour un débutant). Hover de ruff désactivé
+    (recommandation de la doc de Ruff). Tri des imports confié à ruff
+    (disableOrganizeImports dans basedpyright).
+D7  Serveurs/formateurs installés via Homebrew (pas de Mason).
+D8  Pas de formatage automatique à la sauvegarde (évite des diffs Git
+    massifs sur des scripts de collègues). <leader>cf manuel.
+D9  Raccourcis LSP : on garde les défauts de Neovim 0.12 (grn, gra, grr,
+    gri, grt, gO, K, [d ]d) et on ajoute gd, gD, <leader>cr, <leader>ca.
+D10 Préfixes cohérents : <leader>f = Find, g = Git, c = Code, b = Buffers,
+    t = Tabs/Terminal, e = Explorateur ; ]x/[x = suivant/précédent
+    (b buffers, d diagnostics, h hunks Git).
+D11 Providers Python/Node/Ruby/Perl désactivés (inutiles, accélèrent le
+    démarrage, suppriment les warnings checkhealth). Sans rapport avec le
+    développement Python.
+D12 clipboard=unnamedplus (presse-papier macOS partagé), undofile,
+    relativenumber, 4 espaces (2 pour lua/yaml/json/markdown/r).
+
+--------------------------------------------------------------------------------
+ADAPTATIONS PAR RAPPORT AU REPOSITORY
+--------------------------------------------------------------------------------
+- nvim-treesitter.configs -> API main (setup/install + vim.treesitter.start)
+- lspconfig[x].setup()    -> vim.lsp.config() + vim.lsp.enable()
+- mason                   -> Homebrew
+- nvim-cmp (+4 plugins)   -> blink.cmp
+- none-ls                 -> conform.nvim + diagnostics LSP
+- telescope tag 0.1.5     -> version = "*" (v0.2.2) + fzf-native
+- serveurs Ruby/HTML/TS   -> basedpyright, ruff, lua_ls, bashls, clangd
+- catppuccin-mocha via colorscheme direct -> setup() avec intégrations
+  explicites
+- Ctrl+P et live_grep : cwd ; recherche HOME séparée
+- 2 espaces partout -> 4 (Python/PEP 8), 2 pour Lua/YAML/JSON/Markdown/R
+- vim.loop -> vim.uv ; vim.cmd("set …") -> vim.opt
+- swapfile désactivé dans le dépôt -> GARDÉ (protection en cas de crash)
+
+--------------------------------------------------------------------------------
+PROBLÈMES RENCONTRÉS
+--------------------------------------------------------------------------------
+P1  Erreur   : binaire blink.cmp laissé en « libblink_cmp_fuzzy.dylib.tmp »
+              après `nvim --headless "+Lazy! sync" +qa`.
+    Cause    : le téléchargement du binaire est asynchrone ; +qa a quitté
+              Neovim avant la fin.
+    Solution : suppression du .tmp et téléchargement synchrone, puis
+              vérification du SHA-256 (ceeae0c3…a36945, identique au .sha256
+              officiel).
+    Commande : nvim --headless -c 'lua require("lazy").load({plugins={"blink.cmp"}});
+              local d=false; require("blink.cmp.fuzzy.download")
+              .ensure_downloaded(function(e) d=true end);
+              vim.wait(100000,function() return d end)' -c qa
+
+P2  Erreur   : :checkhealth vim.pack -> WARNING « Lockfile is absent, plugin
+              directory is present » (dossier site/pack/core/opt recréé vide
+              alors qu'il avait été supprimé).
+    Cause    : catppuccin v2 active par défaut `auto_integrations`, qui
+              appelle vim.pack.get() pour détecter les plugins ; cet appel
+              crée le dossier de vim.pack (runtime/lua/vim/pack.lua l.872).
+    Solution : auto_integrations = false + liste explicite des intégrations
+              (blink_cmp, gitsigns, neotree, telescope, which_key).
+    Commande : rm -rf ~/.local/share/nvim/site/pack ; édition de
+              lua/plugins/colorscheme.lua
+
+P3  Erreur   : :checkhealth vim.lsp -> WARNING « buffers attached to multiple
+              clients with different position encodings » (UTF-16 / UTF-8).
+    Cause    : sur un fichier Python, basedpyright choisit UTF-16 et ruff UTF-8.
+    Solution : vim.lsp.config("ruff", { capabilities = { general = {
+              positionEncodings = { "utf-16" } } } })
+
+P4  Erreur   : :checkhealth vim.lsp -> WARNING « Unknown filetype 'c.doxygen' /
+              'cpp.doxygen' ».
+    Cause    : la config clangd de nvim-lspconfig liste ces filetypes que
+              Neovim 0.12.5 ne connaît pas.
+    Solution : vim.lsp.config("clangd", { filetypes = { "c", "cpp", "objc",
+              "objcpp", "cuda" } })
+
+P5  Erreur   : :checkhealth provider -> WARNINGS node/perl/ruby/python
+              (« neovim » npm absent, Neovim::Ext absent…).
+    Cause    : providers de plugins distants actifs mais non utilisés.
+    Solution : vim.g.loaded_{python3,node,perl,ruby}_provider = 0
+
+P6  Erreur   : :checkhealth lazy -> ERROR luarocks not installed (config initiale).
+    Cause    : lazy.nvim active le support luarocks par défaut.
+    Solution : rocks = { enabled = false } (aucun plugin n'en a besoin).
+
+P7  Échecs de MES scripts de test (pas de la config) :
+    - « attempt to index local 'picker' (a nil value) » / « Invalid window id »
+      : mon script fermait Telescope sur le mauvais buffer -> corrigé.
+    - Ctrl+P, which-key et lualine « non testables » en --headless : le stub
+      `keys` de lazy.nvim renvoie les touches de façon asynchrone et
+      l'événement VeryLazy dépend de l'interface. -> Tests refaits dans un
+      vrai terminal (pty Python + socket RPC) : tous OK.
+
+Avertissement restant, NON corrigeable et sans conséquence :
+  blink.cmp health : « Some providers may show up as "disabled" but are
+  enabled dynamically » -> message codé en dur (health.lua l.52), toujours
+  affiché, purement informatif.
+
+--------------------------------------------------------------------------------
+TESTS RÉALISÉS
+--------------------------------------------------------------------------------
+Projet de test : dépôt git avec seq.py (erreurs volontaires), util.lua,
+pyproject.toml ; + fichiers .R, Snakefile, .csv, .tsv, .yaml, .md, .c, .json
+
+A. Headless (config complète, 45 vérifications, 41 OK + 4 non applicables
+   en headless, revalidées en B) :
+   [OK] aucune erreur au démarrage (v:errmsg vide, :messages sans erreur)
+   [OK] thème catppuccin-mocha
+   [OK] lazy.nvim : 15 plugins, tous installés
+   [OK] raccourcis définis : <C-p> <leader>ff fg fh fb <C-n> <leader>e
+        <leader>cf <C-h> <leader>tt <leader>bd ]h
+   [OK] Telescope find_files s'ouvre et liste les fichiers du cwd ; fzf chargé
+   [OK] Neo-tree s'ouvre
+   [OK] Treesitter actif : Python, Lua, Bash, R, Snakemake, CSV, TSV, YAML,
+        Markdown, C, JSON ; capture `keyword.function` sur `def`
+   [OK] Pliage Treesitter (foldexpr) sur Python
+   [OK] LSP Python : basedpyright + ruff attachés ; diagnostics des deux
+        (Ruff F821/F401/I001 ; basedpyright reportAssignmentType,
+        reportArgumentType, reportUndefinedVariable)
+   [OK] gd -> définition correcte (ligne 5) ; hover fourni par basedpyright seul
+   [OK] blink.cmp chargé, moteur Rust chargé, capabilities transmises au LSP
+   [OK] Formatage conform : ruff_format (x:int=… -> x: int = …) + tri imports
+   [OK] gitsigns attaché (branche main), ]h défini
+   [OK] lua_ls attaché, connaît la globale `vim` (0 faux diagnostic)
+   [OK] bashls attaché + shellcheck (SC2086 détecté)
+B. Vrai terminal (pty 150x45 + touches réelles + socket RPC) :
+   [OK] Ctrl+P -> « Fichiers dans <cwd> », cwd = dossier courant uniquement,
+        résultats : pyproject.toml, seq.py, util.lua
+   [OK] Espace f g + « gc_content » -> 3 résultats dans seq.py
+   [OK] Espace f h -> « Fichiers dans ~ (HOME) », cwd=/Users/bachri
+   [OK] Ctrl+N ouvre puis referme Neo-tree
+   [OK] Espace -> fenêtre which-key visible
+   [OK] lualine chargé et actif dans la statusline
+   [OK] complétion : menu blink visible en tapant « gc_ », Ctrl+Y insère
+        « gc_content() »
+   (Message E1568 « Terminal did not respond to DSR » : propre au faux
+    terminal de test qui ne répond pas aux requêtes de couleur ; WezTerm y
+    répond normalement.)
+C. :checkhealth complet : 0 ERROR ; 1 seul WARNING (informatif blink, voir
+   plus haut) ; 161 OK.
+D. Temps de démarrage (nvim --startuptime, 10 mesures) :
+   sans fichier : médiane 28,6 ms (min 27,0)
+   avec un .py  : médiane 79 ms (Treesitter + LSP + gitsigns + blink)
+   TUI réel avec seq.py : UIEnter à ~87 ms
+   15 plugins, ~12 chargés en ouvrant un fichier Python ; Telescope, conform
+   chargés seulement à la première utilisation.
+
+--------------------------------------------------------------------------------
+RÉSULTAT FINAL
+--------------------------------------------------------------------------------
+~/.config/nvim/
+├── init.lua                 leader + chargement des 4 modules
+├── lazy-lock.json           versions figées (À GARDER, à versionner)
+├── cheatsheet.md            aide-mémoire
+├── nvim.log                 ce fichier
+└── lua/
+    ├── config/
+    │   ├── options.lua      réglages de l'éditeur
+    │   ├── keymaps.lua      raccourcis généraux
+    │   ├── autocmds.lua     automatismes (yank, indentation par langage…)
+    │   └── lazy.lua         bootstrap + réglages de lazy.nvim
+    └── plugins/
+        ├── colorscheme.lua  catppuccin
+        ├── telescope.lua    telescope + fzf-native
+        ├── treesitter.lua   nvim-treesitter (main)
+        ├── neo-tree.lua     explorateur
+        ├── lsp.lua          nvim-lspconfig + LSP natif
+        ├── completion.lua   blink.cmp
+        ├── formatting.lua   conform.nvim
+        ├── git.lua          gitsigns
+        └── ui.lua           which-key + lualine
+Neovim démarre sans erreur ; toutes les fonctionnalités demandées testées.
+
+--------------------------------------------------------------------------------
+COMMANDES UTILES
+--------------------------------------------------------------------------------
+:Lazy                    interface des plugins (U update, S sync, P profile)
+:Lazy update             mettre à jour les plugins (met à jour lazy-lock.json)
+:Lazy restore            revenir aux versions de lazy-lock.json
+:TSUpdate                mettre à jour les parsers Treesitter
+:TSInstall <lang>        ajouter un parser
+:checkhealth             diagnostic complet
+:checkhealth vim.lsp     état des serveurs LSP (alias :LspInfo)
+:lsp restart             redémarrer les serveurs LSP du buffer
+:ConformInfo             formateurs disponibles
+:BlinkCmp status         santé de l'autocomplétion
+nvim --startuptime /tmp/st.log +qa && tail -1 /tmp/st.log   temps de démarrage
+brew upgrade basedpyright ruff lua-language-server stylua bash-language-server shellcheck shfmt
+
+--------------------------------------------------------------------------------
+MAINTENANCE FUTURE
+--------------------------------------------------------------------------------
+- Mettre à jour : `:Lazy update` puis `:TSUpdate` (nvim-treesitter exige des
+  parsers à jour après chaque mise à jour du plugin ; le build = ":TSUpdate"
+  s'en charge normalement). Si quelque chose casse : `:Lazy restore`.
+- Versionner ~/.config/nvim avec git (git init ; inclure lazy-lock.json)
+  pour pouvoir revenir en arrière facilement.
+- Neovim mis à jour par Homebrew (`brew upgrade neovim`) : nvim-treesitter
+  main ne supporte que la DERNIÈRE version stable -> garder Neovim à jour.
+- blink.cmp : rester sur 1.* tant que la v2 n'est pas stable ; lire
+  UPGRADE.md avant de passer en v2 (nécessitera saghen/blink.lib).
+- Ajouter un serveur LSP : brew install <serveur> puis l'ajouter à la liste
+  `servers` dans lua/plugins/lsp.lua (nom = fichier lsp/<nom>.lua de
+  nvim-lspconfig ; `:help lspconfig-all`).
+- R (LSP) : dans R, install.packages("languageserver"), puis ajouter
+  "r_language_server" à `servers`.
+- JavaScript/TypeScript : :TSInstall javascript typescript ;
+  brew install typescript-language-server ; ajouter "ts_ls".
+- Environnements virtuels Python (uv / venv) : lancer nvim depuis le venv
+  activé (`source .venv/bin/activate` ou `uv run nvim`) pour que
+  basedpyright trouve les paquets installés ; ou configurer
+  [tool.basedpyright] venvPath/venv dans pyproject.toml.
+- Revenir à l'ancienne config : ~/nvim-backups/20261006-223122/
+  (recopier config-nvim -> ~/.config/nvim, share-nvim -> ~/.local/share/nvim)
